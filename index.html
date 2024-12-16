@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Météo App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <link rel="shortcut icon" href="cloud_24dp_5F6368_FILL0_wght400_GRAD0_opsz24.png" type="image/x-icon">
+    <style>
+        [x-cloak] {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen bg-gradient-to-b from-blue-400 to-blue-600 flex flex-col items-center justify-center p-4">
+    <div class="w-full max-w-2xl" x-data="meteo()">
+        <h1 class="text-3xl sm:text-4xl font-bold text-white mb-6 text-center"
+            x-transition:enter-start="opacity-0 transform scale-90"
+            x-transition:enter-end="opacity-100 transform scale-100">Météo App</h1>
+
+        <form @submit.prevent="getDonneesMeteo"
+            class="flex flex-col sm:flex-row w-full items-center space-y-2 sm:space-y-0 sm:space-x-2 mb-8">
+            <input type="text" placeholder="Entrez une ville" x-model="ville"
+                class="flex-grow px-4 py-2 rounded-lg bg-white/20 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white">
+            <button type="submit"
+                class="px-4 py-2 bg-white text-blue-600 rounded-lg hover:bg-blue-100 transition-colors focus:outline-none focus:ring-2 focus:ring-white">
+                <i class="fas fa-search mr-2"></i>Rechercher
+            </button>
+        </form>
+
+        <!-- Chargement -->
+        <div x-show="chargement" class="p-4 rounded-lg mb-4 w-full flex flex-col items-center justify-center">
+            <!-- Ajouté pour une meilleure adaptation -->
+            <div role="status">
+                <svg aria-hidden="true"
+                    class="w-6 sm:w-8 h-6 sm:h-8 text-gray-200 animate-spin dark:text-gray-600 fill-blue-600"
+                    viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    ...
+                </svg>
+                <span class="sr-only">Loading...</span>
+            </div>
+        </div>
+
+        <!-- Erreur -->
+        <div x-show="erreur"
+            class="text-red-500 bg-opacity-25 p-4 rounded-lg mb-4 w-full flex flex-col items-center justify-center">
+            LOCALISATION INTROUVABLE
+        </div>
+
+        <!-- Affichage des données météo -->
+        <div x-show="donneeMeteo" x-transition:enter="transition ease-out duration-300"
+            x-transition:enter-start="opacity-0 transform scale-90"
+            x-transition:enter-end="opacity-100 transform scale-100" class="bg-white/10 text-white rounded-lg p-6">
+            <h2 x-text="donneeMeteo.name" class="text-xl sm:text-2xl font-bold mb-4"></h2>
+            <div class="flex flex-col sm:flex-row justify-between items-center mb-6">
+                <div x-text="`${donneeMeteo.main.temp} °C`" class="text-5xl sm:text-6xl font-bold mb-4 sm:mb-0"></div>
+                <div class="text-center sm:text-right">
+                    <p x-text="donneeMeteo.weather[0].description" class="text-lg sm:text-xl capitalize"></p>
+                    <p x-text="`Humidité: ${donneeMeteo.main.humidity}%`"></p>
+                    <p x-text="`Vent: ${donneeMeteo.wind.speed} km/h`"></p>
+                </div>
+            </div>
+
+            <!-- Prévisions météo -->
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                <template x-for="day in forecast" :key="day.day">
+                    <div class="text-center">
+                        <p x-text="day.day" class="text-sm sm:text-base"></p>
+                        <i :class="`fas fa-${day.icon} text-xl sm:text-2xl my-2`"></i>
+                        <p x-text="`${day.temp}°C`"></p>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        function meteo() {
+            return {
+                ville: '',
+                donneeMeteo: null,
+                erreur: null,
+                chargement: false,
+                forecast: [],
+                cleApi: '8f8d7db9b575964771566e92dd4c96ff',
+
+                async getDonneesMeteo() {
+                    this.erreur = null;
+                    this.donneeMeteo = null;
+                    this.forecast = [];
+                    this.chargement = true;
+
+                    try {
+                        const url = `https://api.openweathermap.org/data/2.5/weather?q=${this.ville}&appid=${this.cleApi}&units=metric&lang=fr`;
+                        const response = await fetch(url);
+                        if (!response.ok) {
+                            throw new Error("Ville introuvable ou problème avec l'API.");
+                        }
+                        const meteoData = await response.json();
+                        this.donneeMeteo = meteoData;
+
+                        const { lat, lon } = meteoData.coord;
+                        const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${this.cleApi}&units=metric&lang=fr`;
+                        const forecastResponse = await fetch(forecastUrl);
+
+                        if (!forecastResponse.ok) {
+                            throw new Error("Impossible de récupérer les prévisions.");
+                        }
+
+                        const forecastData = await forecastResponse.json();
+
+                        this.forecast = forecastData.list
+                            .filter((_, index) => index % 8 === 0)
+                            .map((data) => ({
+                                day: new Date(data.dt_txt).toLocaleDateString('fr-FR', { weekday: 'short' }),
+                                temp: Math.round(data.main.temp),
+                                icon: this.getWeatherIcon(data.weather[0].main),
+                            }));
+                    } catch (err) {
+                        this.erreur = err.message;
+                    } finally {
+                        this.chargement = false;
+                    }
+                },
+
+                getWeatherIcon(weather) {
+                    const icons = {
+                        Clear: 'sun',
+                        Clouds: 'cloud',
+                        Rain: 'cloud-rain',
+                        Snow: 'snowflake',
+                        Thunderstorm: 'bolt',
+                        Drizzle: 'cloud-showers-heavy',
+                        Mist: 'smog',
+                    };
+                    return icons[weather] || 'question';
+                },
+            };
+        }
+    </script>
+</body>
+
+</html>
